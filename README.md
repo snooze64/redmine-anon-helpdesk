@@ -12,6 +12,11 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
   - `POST /users` でユーザー登録、`POST /memberships` で割当、`POST /tickets` で起票
   - 起票時に質問者と「回答者」ロール保持者全員が watcher 自動登録
   - 必要なときだけ `compose.api.yml` を追加で読ませる opt-in 構成
+- **RAG チャットボット** (Ollama + ChromaDB + Streamlit) をさらにオプションで同梱
+  - Redmine の指定プロジェクトのチケットをベクトル化し、過去の解決記録から回答
+  - **Human-in-the-Loop UX**: クローズ / 継続 / 人にエスカレーション の 3 ボタン
+  - エスカレーション時は内部で API ブリッジ経由で Redmine 起票
+  - 差分更新クローラ (`updated_on` 基準で再ベクトル化)、定期実行も APScheduler で対応
 - **SMTP の切替** を `.env` だけで実現
   - `mailpit`（開発時、メールをローカル捕獲）/ `gmail`（個人検証）/ `custom`（任意の SMTP サーバー）
 - **環境変数による完全な設定外部化**
@@ -63,6 +68,7 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
 |---|---|---|
 | **Mode A: Redmine だけ** | Redmine + MySQL（+ Mailpit を有効化していれば） | Web UI から手動でチケット管理する。プラグインの動作確認だけしたい |
 | **Mode B: Redmine + API** | 上記 + FastAPI ブリッジ | チャットボット等の外部システムから REST 経由でチケットを起票したい |
+| **Mode C: Redmine + API + Chatbot** | 上記 + Ollama + ChromaDB + Streamlit | 過去チケットを RAG ソースに AI 回答 + Human-in-the-Loop でエスカレーション |
 
 ### 共通の事前準備
 
@@ -103,6 +109,29 @@ docker compose -f docker-compose.yml -f compose.api.yml up -d
 > ❗ Mode B でブリッジ API を実際に使う前に、`管理 → 設定 → API → 「REST による Web サービス」` で REST API を有効化する必要があります（または下記の `Setting.rest_api_enabled = '1'` を実行）。Mode A しか使わないなら不要です。
 >
 > 詳細・エンドポイント仕様・接続情報の設定方法は **[api/README.md](api/README.md)** を参照。
+
+### Mode C: Redmine + API + Chatbot をフルスタック起動
+
+```bash
+# 3c. ビルド & 起動 (3 つの compose ファイルを重ねる)
+docker compose -f docker-compose.yml -f compose.api.yml -f compose.chatbot.yml build
+docker compose -f docker-compose.yml -f compose.api.yml -f compose.chatbot.yml up -d
+
+# 4c. 初回のみ: Ollama に LLM と embedding モデルを pull (数 GB)
+docker exec redmine-ollama ollama pull qwen2.5:7b
+docker exec redmine-ollama ollama pull nomic-embed-text
+
+# 5c. ブラウザで開く
+#     - http://localhost:3080  Redmine
+#     - http://localhost:8000  ブリッジ API (Swagger UI: /docs)
+#     - http://localhost:8100  Chatbot バックエンド (Swagger UI: /docs)
+#     - http://localhost:8501  Chatbot UI (Streamlit, 3 ボタン HITL)
+#     - http://localhost:11435 Ollama (任意、ホストの別 Ollama 衝突回避のため標準ポートからずらしている)
+```
+
+> ❗ Mode C は Mode B の前提（REST API 有効化、認証情報設定）に加え、**Ollama のモデル pull** が必要です。`qwen2.5:7b` は約 4.7 GB あり、初回 pull に時間がかかります。
+>
+> 詳細・チューニング項目・トラブルシューティングは **[chatbot/README.md](chatbot/README.md)** を参照。
 
 ### 共通の初期セットアップ（Mode A / B 共通）
 
@@ -149,6 +178,7 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 | [docs/manual_setup.md](docs/manual_setup.md) | Web UI のみで完結する全セットアップ手順（ロール、ユーザー、プロジェクト、SMTP、サンプルチケット、動作確認） |
 | [docs/plugin_install.md](docs/plugin_install.md) | redmine_hidden_user_profile プラグイン単体のインストール手順（既存の Redmine への後付け、オフライン環境向けパターンも含む） |
 | [api/README.md](api/README.md) | Mode B のチャットボット連携用 FastAPI ブリッジの仕様 — エンドポイント・接続情報・想定ユースケース |
+| [chatbot/README.md](chatbot/README.md) | Mode C の RAG チャットボットの仕様 — クローラ / ベクトル DB / Ollama / HITL UX |
 
 ## 動作確認済み環境
 
