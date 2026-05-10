@@ -8,6 +8,10 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
 - **匿名性プラグイン** をビルド時に同梱
   - 一般ユーザーが他ユーザーのプロフィール (`/users/:id`) を開けないようにする
   - 担当者/ウォッチャーのリンクをプレーンテキスト化
+- **チャットボット連携用の FastAPI ブリッジ** をオプションで同梱
+  - `POST /users` でユーザー登録、`POST /memberships` で割当、`POST /tickets` で起票
+  - 起票時に質問者と「回答者」ロール保持者全員が watcher 自動登録
+  - 必要なときだけ `compose.api.yml` を追加で読ませる opt-in 構成
 - **SMTP の切替** を `.env` だけで実現
   - `mailpit`（開発時、メールをローカル捕獲）/ `gmail`（個人検証）/ `custom`（任意の SMTP サーバー）
 - **環境変数による完全な設定外部化**
@@ -20,26 +24,28 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
 ## 構成
 
 ```
-┌─────────────────────────────────────────────────┐
-│ Docker host                                     │
-│  ┌───────────┐  ┌──────────┐                    │
-│  │ redmine   │──│ db       │                    │
-│  │ (Rails 7) │  │ (MySQL 8)│                    │
-│  └─────┬─────┘  └──────────┘                    │
-│        │ SMTP                                   │
-│        ▼                                        │
-│  ┌──────────────────────────────────┐           │
-│  │ SMTP_PROVIDER で切替             │           │
-│  │  - mailpit (開発、内部に貯める)  │           │
-│  │  - gmail   (Gmail 経由で送信)    │           │
-│  │  - custom  (任意の SMTP サーバー)│           │
-│  └──────────────────────────────────┘           │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ Docker host                                                 │
+│                                                             │
+│  ┌─────────────┐ optional ┌───────────┐  ┌──────────┐       │
+│  │ api         │─────────>│ redmine   │──│ db       │       │
+│  │ (FastAPI)   │ HTTP     │ (Rails)   │  │ (MySQL 8)│       │
+│  └─────────────┘          └─────┬─────┘  └──────────┘       │
+│       ▲                         │ SMTP                      │
+│       │ HTTP (chatbot)          ▼                           │
+│       │                  ┌──────────────────────────┐       │
+│       │                  │ SMTP_PROVIDER で切替    │        │
+│       │                  │  mailpit / gmail / custom│       │
+│       │                  └──────────────────────────┘       │
+└───────┼─────────────────────────────────────────────────────┘
+        │
+   [Chatbot 等の外部システム]
 
 公開ポート (既定値):
   - 3080  Redmine Web UI       (http://localhost:3080)
   - 13306 MySQL                (mysql client から接続用)
   - 8025  Mailpit Web UI       (Mailpit 利用時のみ)
+  - 8000  FastAPI ブリッジ     (Mode B のみ、http://localhost:8000)
 ```
 
 ## クイックスタート
@@ -49,26 +55,58 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
 - Docker Desktop（または Docker Engine + Compose v2.20+）
 - Git
 
-### 手順
+### 用途別の起動モード
+
+このリポジトリは 2 通りの起動モードをサポートしています。**どちらを選ぶかで使うコマンドが変わるだけ**で、`.env` などの設定ファイルは共通です。
+
+| モード | 含まれるもの | こんなときに |
+|---|---|---|
+| **Mode A: Redmine だけ** | Redmine + MySQL（+ Mailpit を有効化していれば） | Web UI から手動でチケット管理する。プラグインの動作確認だけしたい |
+| **Mode B: Redmine + API** | 上記 + FastAPI ブリッジ | チャットボット等の外部システムから REST 経由でチケットを起票したい |
+
+### 共通の事前準備
 
 ```bash
 # 1. クローン
 git clone https://github.com/snooze64/redmine-anon-helpdesk.git
 cd redmine-anon-helpdesk
 
-# 2. 環境変数のテンプレートをコピー (中身は何も変更しなくても動く)
+# 2. 環境変数のテンプレートをコピー (中身は何も変更しなくても起動できる)
 cp .env.example .env
+```
 
-# 3. ビルド & 起動
+### Mode A: Redmine だけ起動
+
+```bash
+# 3a. ビルド & 起動 (docker-compose.yml だけを使用)
 docker compose build
 docker compose up -d
 
-# 4. ブラウザで開く
-#    http://localhost:3080
-#    初回ログイン: admin / admin → 強制パスワード変更
+# 4a. ブラウザで開く
+#     http://localhost:3080
+#     初回ログイン: admin / admin → 強制パスワード変更
 ```
 
-ここまでで **空の Redmine** が動きます。続いて初期データ投入とロール設定が必要です:
+### Mode B: Redmine + API を一緒に起動
+
+```bash
+# 3b. ビルド & 起動 (docker-compose.yml に compose.api.yml を重ねる)
+docker compose -f docker-compose.yml -f compose.api.yml build
+docker compose -f docker-compose.yml -f compose.api.yml up -d
+
+# 4b. Redmine とブリッジ API の両方が起動
+#     - http://localhost:3080      Redmine
+#     - http://localhost:8000      FastAPI
+#     - http://localhost:8000/docs Swagger UI (API 仕様)
+```
+
+> ❗ Mode B でブリッジ API を実際に使う前に、`管理 → 設定 → API → 「REST による Web サービス」` で REST API を有効化する必要があります（または下記の `Setting.rest_api_enabled = '1'` を実行）。Mode A しか使わないなら不要です。
+>
+> 詳細・エンドポイント仕様・接続情報の設定方法は **[api/README.md](api/README.md)** を参照。
+
+### 共通の初期セットアップ（Mode A / B 共通）
+
+ここまでで Redmine 本体が動いていますが、ロール・トラッカー等の **既定データ投入が必要**です:
 
 ```bash
 # 5. 既定構成データ (Manager/Developer/Reporter ロール、Bug/Feature/Support トラッカー等) を投入
@@ -78,6 +116,12 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 ### 6. ロール・ユーザー・プロジェクト作成
 
 ここから先は管理 UI で操作します。**[docs/manual_setup.md](docs/manual_setup.md)** に画面遷移付きの手順書があります（ロール `質問者` / `回答者` 作成、`Show user profile` 権限の制御、メール通知設定、サンプルチケット投入まで）。
+
+### 起動モードの切替
+
+途中で Mode A → Mode B に切り替えたい場合、起動コマンドを `-f compose.api.yml` 付きで実行し直すだけで OK です。逆に Mode B → A に戻したい場合は `docker compose -f docker-compose.yml -f compose.api.yml down api`（API だけ停止）または通常の `docker compose down`（全停止）を使ってください。
+
+データボリューム（DB/添付ファイル）は両モードで共通なので、切り替えてもデータは保持されます。
 
 ## 設定変数
 
@@ -104,6 +148,7 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 |---|---|
 | [docs/manual_setup.md](docs/manual_setup.md) | Web UI のみで完結する全セットアップ手順（ロール、ユーザー、プロジェクト、SMTP、サンプルチケット、動作確認） |
 | [docs/plugin_install.md](docs/plugin_install.md) | redmine_hidden_user_profile プラグイン単体のインストール手順（既存の Redmine への後付け、オフライン環境向けパターンも含む） |
+| [api/README.md](api/README.md) | Mode B のチャットボット連携用 FastAPI ブリッジの仕様 — エンドポイント・接続情報・想定ユースケース |
 
 ## 動作確認済み環境
 
