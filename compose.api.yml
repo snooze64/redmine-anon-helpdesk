@@ -1,0 +1,51 @@
+# メインの docker-compose.yml に API サービスを追加するための上書きファイル。
+# 起動: docker compose -f docker-compose.yml -f compose.api.yml up -d
+#
+# Redmine と同じネットワークに属するので http://redmine:3000 で内部 API を叩ける。
+# このファイル自体は .gitignore 済 — 要件確定後に本体 compose に統合する想定。
+
+services:
+  api:
+    build:
+      context: ./api
+      args:
+        HTTP_PROXY:  ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY:    ${NO_PROXY:-}
+        http_proxy:  ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy:    ${no_proxy:-}
+    image: redmine-anon-helpdesk-api:latest
+    container_name: ${REDMINE_API_CONTAINER:-redmine-api}
+    restart: unless-stopped
+    depends_on:
+      redmine:
+        condition: service_started
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      # Redmine への接続 — 既定では同 compose の Redmine (http://redmine:3000)。
+      # 別ホストの Redmine に向ける場合は .env で REDMINE_URL を上書きする。
+      # 例: REDMINE_URL=https://redmine.example.com
+      REDMINE_URL:            ${REDMINE_URL:-http://redmine:3000}
+      REDMINE_API_KEY:        ${REDMINE_API_KEY:-}
+      REDMINE_ADMIN_USERNAME: ${REDMINE_ADMIN_USERNAME:-}
+      REDMINE_ADMIN_PASSWORD: ${REDMINE_ADMIN_PASSWORD:-}
+      # 質問者アカウント作成時の参加先 (POST /users で使用)
+      QUESTIONER_PROJECT_IDENTIFIER: ${QUESTIONER_PROJECT_IDENTIFIER:-demo}
+      QUESTIONER_ROLE_NAME:          ${QUESTIONER_ROLE_NAME:-質問者}
+      QUESTIONER_LANGUAGE:           ${QUESTIONER_LANGUAGE:-ja}
+      # 問い合わせチケット起票先 (POST /tickets で使用)
+      # 空ならアカウント作成と同じ既定プロジェクトを使う
+      INQUIRY_PROJECT_IDENTIFIER:    ${INQUIRY_PROJECT_IDENTIFIER:-}
+      # 利用するトラッカー名 (例: 'サポート' / 'Support')。空ならプロジェクトの先頭トラッカー
+      INQUIRY_TRACKER_NAME:          ${INQUIRY_TRACKER_NAME:-}
+      # 起票時にウォッチャーへ自動追加する「回答者」ロール名 (完全一致)
+      RESPONDER_ROLE_NAME:           ${RESPONDER_ROLE_NAME:-回答者}
+      # プロキシ (実行時)
+      HTTP_PROXY:  ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY:    ${NO_PROXY:-}
+      http_proxy:  ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy:    ${no_proxy:-}
