@@ -1,0 +1,104 @@
+# RAG チャットボット (Mode C) のサービス定義。
+# メイン docker-compose.yml + compose.api.yml に重ねて読ませる:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f compose.api.yml \
+#     -f compose.chatbot.yml \
+#     up -d
+#
+# 依存関係:
+#   - Ollama (LLM + embedding モデルを serve)
+#   - chatbot バックエンド (FastAPI)
+#   - chatbot フロントエンド (Streamlit)
+#   - 既存の api サービス (POST /tickets でエスカレーション先)
+#   - 既存の redmine サービス (RAG ソース)
+
+services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ${OLLAMA_CONTAINER:-redmine-ollama}
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      # ホストから debug でアクセスする用 (任意)。
+      # 既定はホスト側 11435 (ホストに別の Ollama がいても衝突しないように)。
+      # コンテナ内部ポートは Ollama 標準の 11434 のまま。
+      - "${OLLAMA_PORT:-11435}:11434"
+
+  chatbot:
+    build:
+      context: ./chatbot
+      args:
+        HTTP_PROXY:  ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY:    ${NO_PROXY:-}
+        http_proxy:  ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy:    ${no_proxy:-}
+    image: redmine-anon-helpdesk-chatbot:latest
+    container_name: ${CHATBOT_CONTAINER:-redmine-chatbot}
+    restart: unless-stopped
+    depends_on:
+      redmine:
+        condition: service_started
+      ollama:
+        condition: service_started
+    ports:
+      - "${CHATBOT_PORT:-8100}:8100"
+    environment:
+      # Redmine 接続 (RAG ソース)
+      REDMINE_URL:            ${REDMINE_URL:-http://redmine:3000}
+      REDMINE_API_KEY:        ${REDMINE_API_KEY:-}
+      REDMINE_ADMIN_USERNAME: ${REDMINE_ADMIN_USERNAME:-}
+      REDMINE_ADMIN_PASSWORD: ${REDMINE_ADMIN_PASSWORD:-}
+      # 取込対象
+      CRAWL_PROJECT_IDENTIFIER: ${CRAWL_PROJECT_IDENTIFIER:-demo}
+      CRAWL_INCLUDE_JOURNALS:   ${CRAWL_INCLUDE_JOURNALS:-true}
+      # ベクトル DB
+      CHROMA_PERSIST_DIR: /data/chroma
+      CHROMA_COLLECTION:  ${CHROMA_COLLECTION:-redmine_tickets}
+      # Ollama (LLM + embedding)
+      OLLAMA_URL:         http://ollama:11434
+      OLLAMA_LLM_MODEL:   ${OLLAMA_LLM_MODEL:-qwen2.5:7b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      # RAG パラメータ
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
+      LLM_MAX_TOKENS:  ${LLM_MAX_TOKENS:-1024}
+      # エスカレーション先 (api/ サービス)
+      BRIDGE_API_URL: ${BRIDGE_API_URL:-http://api:8000}
+      # 定期 crawl (分単位、0 で無効)
+      CRAWL_INTERVAL_MINUTES: ${CRAWL_INTERVAL_MINUTES:-0}
+      # プロキシ
+      HTTP_PROXY:  ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY:    ${NO_PROXY:-}
+      http_proxy:  ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy:    ${no_proxy:-}
+    volumes:
+      - chroma_data:/data/chroma
+
+  chatbot-frontend:
+    build:
+      context: ./chatbot/frontend
+      args:
+        HTTP_PROXY:  ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY:    ${NO_PROXY:-}
+    image: redmine-anon-helpdesk-chatbot-frontend:latest
+    container_name: ${CHATBOT_FRONTEND_CONTAINER:-redmine-chatbot-ui}
+    restart: unless-stopped
+    depends_on:
+      chatbot:
+        condition: service_started
+    ports:
+      - "${CHATBOT_FRONTEND_PORT:-8501}:8501"
+    environment:
+      CHATBOT_API_URL: http://chatbot:8100
+
+volumes:
+  ollama_data:
+  chroma_data:
