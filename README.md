@@ -53,8 +53,8 @@ Docker Compose で Redmine 6 を立ち上げ、匿名性確保のための [redm
 
 ```bash
 # 1. クローン
-git clone https://github.com/snooze64/<this-repo>.git
-cd <this-repo>
+git clone https://github.com/snooze64/redmine-anon-helpdesk.git
+cd redmine-anon-helpdesk
 
 # 2. 環境変数のテンプレートをコピー (中身は何も変更しなくても動く)
 cp .env.example .env
