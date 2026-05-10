@@ -1,0 +1,124 @@
+# すべての設定可能項目は .env で上書き可能。docker-compose.yml 側は既定値のみ持ち、
+# .env に値があればそれを採用する設計です（${VAR:-default} 構文）。
+# 利用可能な環境変数の一覧と説明は .env.example を参照してください。
+
+name: ${COMPOSE_PROJECT_NAME:-redmine}
+
+services:
+  db:
+    image: mysql:${MYSQL_VERSION:-8.0}
+    container_name: ${REDMINE_DB_CONTAINER:-redmine-db}
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-redmine_root_pw}
+      MYSQL_DATABASE:      ${MYSQL_DATABASE:-redmine}
+      MYSQL_USER:          ${MYSQL_USER:-redmine}
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD:-redmine_pw}
+    ports:
+      # ホスト側のポート (mysql クライアントから直接繋ぎたい場合に使用)
+      # コンテナ内部ポート 3306 は固定。ホスト側は MYSQL_PORT で変更可。
+      # ホスト側の既定 3306 を使うと MySQL を直接インストールしている環境と
+      # 衝突するので、デフォルトはずらして 13306 にしている。
+      - "${MYSQL_PORT:-13306}:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db6_data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD
+        - mysqladmin
+        - ping
+        - -h
+        - localhost
+        - -uroot
+        - -p${MYSQL_ROOT_PASSWORD:-redmine_root_pw}
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ===========================================================
+  # Mailpit (開発・検証用 SMTP キャッチサーバー) — 既定で無効化
+  # 使う場合は下のブロックと redmine.depends_on の mailpit エントリの
+  # 両方のコメントを外し、.env で SMTP_PROVIDER=mailpit に設定する
+  # ===========================================================
+  # mailpit:
+  #   image: ${MAILPIT_IMAGE:-axllent/mailpit:latest}
+  #   container_name: ${REDMINE_MAILPIT_CONTAINER:-redmine-mailpit}
+  #   restart: unless-stopped
+  #   environment:
+  #     MP_SMTP_AUTH_ACCEPT_ANY:    "1"
+  #     MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+  #   ports:
+  #     - "${MAILPIT_UI_PORT:-8025}:8025"   # Web UI
+  #     # SMTP (1025) は redmine から内部ネットワーク経由のため publish 不要
+
+  redmine:
+    build:
+      context: .
+      args:
+        # ビルド時 (apt-get / git clone) のプロキシ。.env に未設定なら空文字 = プロキシなし。
+        # 大文字/小文字を独立変数として扱う (Linux 環境では別変数)。
+        HTTP_PROXY:  ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY:    ${NO_PROXY:-}
+        http_proxy:  ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy:    ${no_proxy:-}
+    container_name: ${REDMINE_APP_CONTAINER:-redmine-app}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      # ↓ mailpit を使う場合は下記 3 行と上の mailpit サービスブロックを
+      #   セットでアンコメントする (.env.example 参照)
+      # mailpit:
+      #   condition: service_started
+      #   required: false
+    ports:
+      - "${REDMINE_PORT:-3080}:3000"
+    environment:
+      # --- DB 接続 (db サービスの内部参照) ---
+      REDMINE_DB_MYSQL:    db
+      REDMINE_DB_PORT:     3306
+      REDMINE_DB_DATABASE: ${MYSQL_DATABASE:-redmine}
+      REDMINE_DB_USERNAME: ${MYSQL_USER:-redmine}
+      REDMINE_DB_PASSWORD: ${MYSQL_PASSWORD:-redmine_pw}
+      # --- アプリ ---
+      REDMINE_SECRET_KEY_BASE: ${REDMINE_SECRET_KEY_BASE:-please_change_this_secret_key_base}
+      SECRET_KEY_BASE:         ${REDMINE_SECRET_KEY_BASE:-please_change_this_secret_key_base}
+      TZ:                      ${TZ:-Asia/Tokyo}
+      # --- SMTP 切替 (.env で上書き)。未設定なら Mailpit を使う ---
+      # SMTP_PROVIDER: mailpit (default) / gmail / custom
+      SMTP_PROVIDER:        ${SMTP_PROVIDER:-mailpit}
+      SMTP_FROM:            ${SMTP_FROM:-redmine@example.local}
+      # gmail プリセット
+      GMAIL_USER:           ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD:   ${GMAIL_APP_PASSWORD:-}
+      # custom (任意の SMTP サーバー: 自前リレー / SendGrid / SES / Office365 等)
+      SMTP_HOST:            ${SMTP_HOST:-}
+      SMTP_PORT:            ${SMTP_PORT:-25}
+      SMTP_DOMAIN:          ${SMTP_DOMAIN:-}
+      SMTP_USER:            ${SMTP_USER:-}
+      SMTP_PASSWORD:        ${SMTP_PASSWORD:-}
+      SMTP_AUTH:            ${SMTP_AUTH:-login}
+      SMTP_STARTTLS:        ${SMTP_STARTTLS:-false}
+      SMTP_TLS_VERIFY:      ${SMTP_TLS_VERIFY:-none}
+      SMTP_OPENSSL_CA_FILE: ${SMTP_OPENSSL_CA_FILE:-}
+      # --- プロキシ ---
+      # アプリにより参照する変数名の慣習が異なるため大文字/小文字とも渡す。
+      # それぞれ .env で独立に値を設定可能 (Linux 環境では別変数として扱われる)。
+      HTTP_PROXY:  ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY:    ${NO_PROXY:-}
+      http_proxy:  ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy:    ${no_proxy:-}
+    volumes:
+      - redmine6_files:/usr/src/redmine/files
+      - ./config/configuration.yml:/usr/src/redmine/config/configuration.yml:ro
+
+volumes:
+  db6_data:
+  redmine6_files:

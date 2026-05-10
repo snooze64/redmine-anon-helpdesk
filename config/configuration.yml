@@ -1,0 +1,46 @@
+# Redmine configuration.yml
+#   ERB が評価される。ENV['SMTP_PROVIDER'] で送信経路を切替:
+#     - 未設定 / 'mailpit' : Mailpit (開発時、http://localhost:8025 で確認)
+#     - 'gmail'            : Gmail SMTP プリセット (要 App Password)
+#     - 'custom'           : 任意の SMTP サーバー (自前リレー / SendGrid /
+#                            Amazon SES / Office 365 等、SMTP 受信全般)
+#                            SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
+#                            SMTP_AUTH, SMTP_STARTTLS, SMTP_TLS_VERIFY,
+#                            SMTP_DOMAIN, SMTP_OPENSSL_CA_FILE で挙動を指定。
+#   詳細: docs/manual_setup.md §4-1
+
+default:
+  email_delivery:
+    delivery_method: :smtp
+    smtp_settings:
+<% provider = ENV['SMTP_PROVIDER'].to_s.downcase %>
+<% if provider == 'gmail' %>
+      address: smtp.gmail.com
+      port: 587
+      domain: <%= ENV.fetch('SMTP_DOMAIN', 'gmail.com') %>
+      authentication: :login
+      user_name: <%= ENV['GMAIL_USER'] %>
+      password: <%= ENV['GMAIL_APP_PASSWORD'] %>
+      enable_starttls_auto: true
+      openssl_verify_mode: 'peer'
+<% elsif provider == 'custom' %>
+      address: <%= ENV.fetch('SMTP_HOST', 'localhost') %>
+      port: <%= ENV.fetch('SMTP_PORT', '25').to_i %>
+      domain: <%= ENV.fetch('SMTP_DOMAIN', 'localhost') %>
+<% if ENV['SMTP_USER'].to_s != '' %>
+      authentication: <%= (ENV['SMTP_AUTH'] || 'login').to_sym.inspect %>
+      user_name: <%= ENV['SMTP_USER'] %>
+      password: <%= ENV['SMTP_PASSWORD'] %>
+<% end %>
+      enable_starttls_auto: <%= (ENV['SMTP_STARTTLS'] || 'false').downcase == 'true' %>
+      openssl_verify_mode: <%= (ENV['SMTP_TLS_VERIFY'] || 'none').inspect %>
+<% if ENV['SMTP_OPENSSL_CA_FILE'].to_s != '' %>
+      openssl_ca_file: <%= ENV['SMTP_OPENSSL_CA_FILE'] %>
+<% end %>
+<% else %>
+      address: mailpit
+      port: 1025
+      domain: localhost
+      enable_starttls_auto: false
+      openssl_verify_mode: 'none'
+<% end %>

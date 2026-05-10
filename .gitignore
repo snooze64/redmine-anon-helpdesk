@@ -1,0 +1,21 @@
+# Local secrets — Gmail App Password 等を入れる .env はリポジトリに含めない
+.env
+.env.local
+.env.*.local
+
+# 検証用に残った中間ファイル (削除しても問題ないがバージョン管理しない)
+admin_view.html
+tester_view.html
+test_snippet.mjs
+debug_patch.rb
+debug_view_hook.rb
+
+# ドキュメント検証用に立てた別環境一式 (本番設定とは独立)
+verify/
+
+# ローカル用初期化スクリプト一式 (デモパスワード・サンプルデータ含むため非公開)
+# 同等の手順は docs/manual_setup.md に文章化済み
+scripts/
+
+# 一時的な /tmp 系の出力
+*.log
