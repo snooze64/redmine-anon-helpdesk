@@ -39,16 +39,21 @@ def search(q: str, top_k: Optional[int] = None) -> SearchResponse:
     store = get_store()
     results = store.query(emb, top_k=k)
 
+    public_base = settings.redmine_public_url.rstrip("/")
     hits: list[SearchHit] = []
     for r in results:
         md = r.get("metadata") or {}
         doc = r.get("document") or ""
         snippet = doc[:200].replace("\n", " ")
+        iid = int(md.get("issue_id", 0))
+        # 既存 metadata の url は内部 URL の可能性があるので、
+        # 現在の public_base から組み立て直す
+        url = f"{public_base}/issues/{iid}" if iid else str(md.get("url", ""))
         hits.append(SearchHit(
-            issue_id=int(md.get("issue_id", 0)),
+            issue_id=iid,
             subject=str(md.get("subject", "")),
             status=str(md.get("status", "")),
-            url=str(md.get("url", "")),
+            url=url,
             distance=float(r.get("distance", 0.0)),
             snippet=snippet,
         ))

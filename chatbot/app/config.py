@@ -12,7 +12,12 @@ class Settings(BaseSettings):
     )
 
     # ----- Redmine 接続 -----
+    # 内部 (Python -> Redmine REST) 接続先。docker compose 内では http://redmine:3000
     redmine_url: str = "http://redmine:3000"
+    # 外部 (ブラウザ等から Redmine へアクセスするときの公開 URL)。
+    # citation のリンクや、メール本文中の Issue URL 生成に使う。
+    # 既定はローカル開発を想定: http://localhost:3080
+    redmine_public_url: str = "http://localhost:3080"
     redmine_api_key: str = ""
     redmine_admin_username: str = ""
     redmine_admin_password: str = ""

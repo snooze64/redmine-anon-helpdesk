@@ -84,13 +84,18 @@ def answer(
 
     text = llm_chat(messages, cfg=llm_config)
 
+    public_base = settings.redmine_public_url.rstrip("/")
     citations = []
     for r in hits:
         md = r.get("metadata") or {}
+        iid = int(md.get("issue_id", 0))
+        # 既存 metadata の url は内部 URL の可能性があるので、
+        # 現在の public_base から組み立て直す
+        url = f"{public_base}/issues/{iid}" if iid else str(md.get("url", ""))
         citations.append({
-            "issue_id": int(md.get("issue_id", 0)),
+            "issue_id": iid,
             "subject": str(md.get("subject", "")),
-            "url": str(md.get("url", "")),
+            "url": url,
             "status": str(md.get("status", "")),
             "distance": float(r.get("distance", 0.0)),
         })

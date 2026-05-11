@@ -151,7 +151,8 @@ def _build_metadata(issue) -> dict:
         "is_private": bool(getattr(issue, "is_private", False)),
         "created_on": str(safe(issue, "created_on", "")),
         "updated_on": str(safe(issue, "updated_on", "")),
-        "url": f"{settings.redmine_url.rstrip('/')}/issues/{issue.id}",
+        # citation 用には外部 URL を使う (ブラウザがアクセスできる URL)
+        "url": f"{settings.redmine_public_url.rstrip('/')}/issues/{issue.id}",
     }
     return md
 

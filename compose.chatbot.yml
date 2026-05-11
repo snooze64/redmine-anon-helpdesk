@@ -50,6 +50,9 @@ services:
     environment:
       # Redmine 接続 (RAG ソース)
       REDMINE_URL:            ${REDMINE_URL:-http://redmine:3000}
+      # 公開 URL (ブラウザから Redmine にアクセスするときの URL)。citation のリンクに使う。
+      # docker-compose.yml の REDMINE_PORT (既定 3080) と整合させる
+      REDMINE_PUBLIC_URL:     ${REDMINE_PUBLIC_URL:-http://localhost:${REDMINE_PORT:-3080}}
       REDMINE_API_KEY:        ${REDMINE_API_KEY:-}
       REDMINE_ADMIN_USERNAME: ${REDMINE_ADMIN_USERNAME:-}
       REDMINE_ADMIN_PASSWORD: ${REDMINE_ADMIN_PASSWORD:-}
