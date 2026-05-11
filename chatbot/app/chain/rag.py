@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.chain.llm import chat as llm_chat
+from typing import Optional
+
+from app.chain.llm import LLMConfig, chat as llm_chat
 from app.config import settings
 from app.store.embedder import embed_one
 from app.store.vectorstore import get_store
@@ -45,13 +47,15 @@ def answer(
     question: str,
     history: list[dict] | None = None,
     top_k: int | None = None,
+    llm_config: Optional[LLMConfig] = None,
 ) -> RagAnswer:
     """RAG で回答する。
 
     Args:
-        question: 今回のユーザー発話
-        history:  これまでの会話履歴 (role/content)。空ならこれが初回。
-        top_k:    検索件数 (None なら settings.retrieval_top_k)
+        question:   今回のユーザー発話
+        history:    これまでの会話履歴 (role/content)。空ならこれが初回。
+        top_k:      検索件数 (None なら settings.retrieval_top_k)
+        llm_config: LLM プロバイダ・モデル・API キー等。None なら settings 既定。
     """
     k = top_k or settings.retrieval_top_k
     store = get_store()
@@ -78,7 +82,7 @@ def answer(
 
     messages.append({"role": "user", "content": question})
 
-    text = llm_chat(messages)
+    text = llm_chat(messages, cfg=llm_config)
 
     citations = []
     for r in hits:

@@ -1,31 +1,69 @@
-"""Ollama 経由の LLM 呼出 (chat completion)。"""
+"""LLM 呼出 (Ollama / OpenAI を抽象化)。"""
 from __future__ import annotations
 
-from typing import Iterable
+from dataclasses import dataclass
+from typing import Literal, Optional
 
 import httpx
 
 from app.config import settings
 
 
+Provider = Literal["ollama", "openai"]
+
+
 class LLMError(RuntimeError):
     pass
 
 
-def chat(messages: list[dict], temperature: float | None = None,
-         max_tokens: int | None = None, timeout: float = 120.0) -> str:
-    """Ollama /api/chat を呼び出し assistant メッセージを返す。
+@dataclass
+class LLMConfig:
+    """1 リクエスト or 1 セッションの LLM 設定。
 
-    messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
+    provider:
+      - "ollama": ローカル/コンテナ内 Ollama を使う (api_key 不要)
+      - "openai": OpenAI API を使う (api_key 必須)
+    model:
+      未指定なら provider 既定モデルにフォールバック
+    api_key:
+      openai の場合のみ必須。未指定なら settings.openai_api_key にフォールバック
     """
+    provider: Provider = "ollama"
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+    def resolve_model(self) -> str:
+        if self.model:
+            return self.model
+        if self.provider == "ollama":
+            return settings.ollama_llm_model
+        return settings.openai_llm_model_default
+
+    def resolve_temperature(self) -> float:
+        return self.temperature if self.temperature is not None else settings.llm_temperature
+
+    def resolve_max_tokens(self) -> int:
+        return self.max_tokens if self.max_tokens is not None else settings.llm_max_tokens
+
+    def resolve_api_key(self) -> str:
+        if self.api_key:
+            return self.api_key
+        return settings.openai_api_key
+
+
+# ---- Provider 別実装 ------------------------------------------------------
+
+def _chat_ollama(messages: list[dict], cfg: LLMConfig, timeout: float) -> str:
     url = f"{settings.ollama_url.rstrip('/')}/api/chat"
     payload = {
-        "model": settings.ollama_llm_model,
+        "model": cfg.resolve_model(),
         "messages": messages,
         "stream": False,
         "options": {
-            "temperature": temperature if temperature is not None else settings.llm_temperature,
-            "num_predict": max_tokens if max_tokens is not None else settings.llm_max_tokens,
+            "temperature": cfg.resolve_temperature(),
+            "num_predict": cfg.resolve_max_tokens(),
         },
     }
     try:
@@ -40,3 +78,69 @@ def chat(messages: list[dict], temperature: float | None = None,
     if not isinstance(msg, str):
         raise LLMError(f"Ollama レスポンスが不正: {data}")
     return msg
+
+
+def _chat_openai(messages: list[dict], cfg: LLMConfig, timeout: float) -> str:
+    api_key = cfg.resolve_api_key()
+    if not api_key:
+        raise LLMError(
+            "OpenAI を使うには API キーが必要です。"
+            "セッション作成時に llm_api_key を指定するか、環境変数 OPENAI_API_KEY を設定してください。"
+        )
+
+    # 遅延 import (openai SDK が未インストールでも ollama path は使えるように)
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise LLMError("openai SDK 未インストール。requirements.txt を確認してください。") from e
+
+    client = OpenAI(api_key=api_key, timeout=timeout)
+    model = cfg.resolve_model()
+
+    # o1 / o3 系は temperature 非対応・max_completion_tokens のみ
+    is_reasoning_model = model.startswith(("o1", "o3"))
+
+    try:
+        if is_reasoning_model:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=cfg.resolve_max_tokens(),
+            )
+        else:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=cfg.resolve_temperature(),
+                max_tokens=cfg.resolve_max_tokens(),
+            )
+    except Exception as e:
+        # OpenAI SDK の AuthenticationError / RateLimitError などをまとめてラップ
+        raise LLMError(f"OpenAI chat 呼出失敗: {type(e).__name__}: {e}") from e
+
+    choices = getattr(resp, "choices", None) or []
+    if not choices:
+        raise LLMError(f"OpenAI レスポンスに choices が無い: {resp}")
+    content = getattr(choices[0].message, "content", None)
+    if not isinstance(content, str):
+        raise LLMError(f"OpenAI レスポンス content が不正: {choices[0]}")
+    return content
+
+
+# ---- 公開関数 -------------------------------------------------------------
+
+def chat(messages: list[dict], cfg: Optional[LLMConfig] = None,
+         timeout: float = 120.0) -> str:
+    """LLM に問い合わせて assistant メッセージ文字列を返す。
+
+    cfg を渡さなければ settings の既定 (provider=settings.llm_provider_default)
+    に従う。
+    """
+    if cfg is None:
+        cfg = LLMConfig(provider=settings.llm_provider_default)  # type: ignore[arg-type]
+
+    if cfg.provider == "ollama":
+        return _chat_ollama(messages, cfg, timeout)
+    if cfg.provider == "openai":
+        return _chat_openai(messages, cfg, timeout)
+    raise LLMError(f"未対応の LLM provider: {cfg.provider}")

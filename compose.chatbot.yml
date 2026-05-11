@@ -59,10 +59,15 @@ services:
       # ベクトル DB
       CHROMA_PERSIST_DIR: /data/chroma
       CHROMA_COLLECTION:  ${CHROMA_COLLECTION:-redmine_tickets}
-      # Ollama (LLM + embedding)
+      # LLM プロバイダ既定 (UI から openai に切替可能)
+      LLM_PROVIDER_DEFAULT: ${LLM_PROVIDER_DEFAULT:-ollama}
+      # Ollama (LLM + embedding は常に Ollama)
       OLLAMA_URL:         http://ollama:11434
       OLLAMA_LLM_MODEL:   ${OLLAMA_LLM_MODEL:-qwen2.5:7b}
       OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      # OpenAI (UI からの API キーが優先。環境変数はフォールバック)
+      OPENAI_API_KEY:           ${OPENAI_API_KEY:-}
+      OPENAI_LLM_MODEL_DEFAULT: ${OPENAI_LLM_MODEL_DEFAULT:-gpt-4o-mini}
       # RAG パラメータ
       RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import settings
-from app.routers import crawl, health, search, sessions
+from app.routers import crawl, health, models, search, sessions
 from app.scheduler import start as start_scheduler, stop as stop_scheduler
 
 
@@ -42,6 +42,7 @@ app.include_router(health.router)
 app.include_router(crawl.router)
 app.include_router(search.router)
 app.include_router(sessions.router)
+app.include_router(models.router)
 
 
 @app.get("/", tags=["meta"])

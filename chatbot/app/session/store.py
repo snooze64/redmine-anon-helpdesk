@@ -33,6 +33,11 @@ class ChatSession:
     updated_at: float = field(default_factory=time.time)
     escalated_issue_id: Optional[int] = None
 
+    # LLM 設定 (None なら settings 既定 = Ollama)
+    llm_provider: Optional[str] = None         # "ollama" | "openai"
+    llm_model: Optional[str] = None
+    llm_api_key: Optional[str] = None          # OpenAI 用 (Ollama では未使用)
+
     def add_turn(self, role: str, content: str, citations: list[dict] | None = None) -> ChatTurn:
         t = ChatTurn(role=role, content=content, citations=citations or [])
         self.turns.append(t)

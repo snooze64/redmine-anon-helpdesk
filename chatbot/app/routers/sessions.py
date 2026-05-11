@@ -1,10 +1,13 @@
 from typing import Optional
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.chain.llm import LLMError
+from app.chain.llm import LLMConfig, LLMError
 from app.chain.rag import answer as rag_answer
+from app.config import settings
 from app.session.escalate import EscalationError, escalate
 from app.session.store import ChatSession, get_registry
 
@@ -18,6 +21,17 @@ class CreateSessionRequest(BaseModel):
         None, description="質問者の Redmine ログインID。未指定なら匿名 (escalate 時に自動生成)"
     )
     user_email: Optional[str] = Field(None, description="エスカレーション時の通知先メール")
+    # LLM 設定 (省略時は settings 既定 = Ollama)
+    llm_provider: Optional[Literal["ollama", "openai"]] = Field(
+        None, description="使用する LLM プロバイダ。未指定で既定 (通常は ollama)"
+    )
+    llm_model: Optional[str] = Field(
+        None, description="モデル名 (例: 'qwen2.5:7b' or 'gpt-4o-mini')"
+    )
+    llm_api_key: Optional[str] = Field(
+        None,
+        description="OpenAI 等の API キー。Ollama では不要。レスポンスには絶対に含めない。",
+    )
 
 
 class SessionView(BaseModel):
@@ -26,6 +40,9 @@ class SessionView(BaseModel):
     turns: int
     user_login: Optional[str] = None
     escalated_issue_id: Optional[int] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    # API キーはレスポンスに含めない
 
 
 class PostMessageRequest(BaseModel):
@@ -78,6 +95,17 @@ def _view(s: ChatSession) -> SessionView:
         turns=len(s.turns),
         user_login=s.user_login,
         escalated_issue_id=s.escalated_issue_id,
+        llm_provider=s.llm_provider,
+        llm_model=s.llm_model,
+    )
+
+
+def _llm_config_from_session(s: ChatSession) -> LLMConfig:
+    provider = s.llm_provider or settings.llm_provider_default
+    return LLMConfig(
+        provider=provider,         # type: ignore[arg-type]
+        model=s.llm_model,
+        api_key=s.llm_api_key,
     )
 
 
@@ -95,7 +123,21 @@ def _require_open_session(sid: str) -> ChatSession:
 @router.post("", response_model=SessionView, summary="新規チャットセッション開始")
 def create_session(req: Optional[CreateSessionRequest] = None) -> SessionView:
     req = req or CreateSessionRequest()
+
+    provider = req.llm_provider or settings.llm_provider_default
+    if provider == "openai":
+        key = req.llm_api_key or settings.openai_api_key
+        if not key:
+            raise HTTPException(
+                status_code=422,
+                detail="OpenAI を選択した場合 llm_api_key が必須です (環境変数 OPENAI_API_KEY が無い場合)。",
+            )
+
     s = get_registry().create(user_login=req.user_login, user_email=req.user_email)
+    # セッションに LLM 設定を保存 (API キーはレスポンスには含めない)
+    s.llm_provider = provider
+    s.llm_model = req.llm_model
+    s.llm_api_key = req.llm_api_key
     return _view(s)
 
 
@@ -119,7 +161,11 @@ def post_message(session_id: str, req: PostMessageRequest) -> PostMessageRespons
         history = s.history_for_llm(limit_turns=4)
         # 直近に追加した user メッセージは history 末尾に入っているので、rag_answer に
         # 入れる history からは除外し、question として渡す
-        ans = rag_answer(question=req.message, history=history[:-1])
+        ans = rag_answer(
+            question=req.message,
+            history=history[:-1],
+            llm_config=_llm_config_from_session(s),
+        )
     except LLMError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception as e:
