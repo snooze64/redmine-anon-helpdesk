@@ -16,12 +16,15 @@ from chromadb.config import Settings as ChromaSettings
 from app.config import settings
 
 
+# CrawlOutcome は pipeline.py 側に移動済 (こちらは後方互換用に残しても良いが未使用)
 @dataclass
 class CrawlOutcome:
     fetched: int
     inserted: int
     updated: int
     skipped_unchanged: int
+    deleted: int = 0
+    skipped_private: int = 0
 
 
 def _doc_id(issue_id: int) -> str:

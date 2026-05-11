@@ -59,6 +59,9 @@ services:
       # 取込対象
       CRAWL_PROJECT_IDENTIFIER: ${CRAWL_PROJECT_IDENTIFIER:-demo}
       CRAWL_INCLUDE_JOURNALS:   ${CRAWL_INCLUDE_JOURNALS:-true}
+      # プライベートチケットを VectorDB に取り込まない (既に取込済なら削除)。
+      # 後で private が外されたチケットは次回 crawl で自動的に拾い直される。
+      CRAWL_EXCLUDE_PRIVATE:    ${CRAWL_EXCLUDE_PRIVATE:-true}
       # ベクトル DB
       CHROMA_PERSIST_DIR: /data/chroma
       CHROMA_COLLECTION:  ${CHROMA_COLLECTION:-redmine_tickets}

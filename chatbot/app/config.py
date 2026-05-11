@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # 全状態を含めるため status_id=* を使う
     crawl_include_journals: bool = True
     crawl_page_size: int = 100
+    # プライベートチケットを除外するか (True: 取込まない & 既に取込済なら削除)
+    # 後から private が外されたチケットは自動で再取込される (フラグ更新で updated_on も新しくなるため)
+    crawl_exclude_private: bool = True
 
     # ----- ベクトル DB (Chroma 永続化先) -----
     chroma_persist_dir: str = "/data/chroma"

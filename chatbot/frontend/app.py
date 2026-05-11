@@ -217,7 +217,12 @@ with st.sidebar:
                 r.raise_for_status()
                 d = r.json()
                 st.success(
-                    f"取得 {d['fetched']} / 新規 {d['inserted']} / 更新 {d['updated']} / スキップ {d['skipped_unchanged']}"
+                    f"取得 {d['fetched']}"
+                    f" / 新規 {d['inserted']}"
+                    f" / 更新 {d['updated']}"
+                    f" / 削除 {d.get('deleted', 0)}"
+                    f" / スキップ(変更なし) {d['skipped_unchanged']}"
+                    f" / スキップ(private) {d.get('skipped_private', 0)}"
                 )
             except Exception as e:
                 st.error(f"crawl 失敗: {e}")
