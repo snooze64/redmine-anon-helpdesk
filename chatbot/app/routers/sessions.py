@@ -32,6 +32,15 @@ class CreateSessionRequest(BaseModel):
         None,
         description="OpenAI 等の API キー。Ollama では不要。レスポンスには絶対に含めない。",
     )
+    llm_base_url: Optional[str] = Field(
+        None,
+        description=(
+            "OpenAI 互換 API の base URL "
+            "(例: 'https://my-gw.example.com/v1')。"
+            "空なら settings.openai_base_url_default、それも空なら公式 OpenAI を使う。"
+            "Ollama では無視される。"
+        ),
+    )
 
 
 class SessionView(BaseModel):
@@ -106,6 +115,7 @@ def _llm_config_from_session(s: ChatSession) -> LLMConfig:
         provider=provider,         # type: ignore[arg-type]
         model=s.llm_model,
         api_key=s.llm_api_key,
+        base_url=s.llm_base_url,
     )
 
 
@@ -134,10 +144,11 @@ def create_session(req: Optional[CreateSessionRequest] = None) -> SessionView:
             )
 
     s = get_registry().create(user_login=req.user_login, user_email=req.user_email)
-    # セッションに LLM 設定を保存 (API キーはレスポンスには含めない)
+    # セッションに LLM 設定を保存 (API キー / base URL はレスポンスには含めない)
     s.llm_provider = provider
     s.llm_model = req.llm_model
     s.llm_api_key = req.llm_api_key
+    s.llm_base_url = (req.llm_base_url or "").strip() or None
     return _view(s)
 
 
@@ -208,9 +219,20 @@ def escalate_session(session_id: str, req: Optional[EscalateRequest] = None) -> 
     s = _require_open_session(session_id)
     req = req or EscalateRequest()
 
-    # 質問者情報の解決
+    # 質問者情報の解決。
+    # email は必須 (同じ人による複数回エスカレーションでアカウントが量産されないよう
+    # email で名寄せする)。
     user_login = req.user_login or s.user_login
-    user_email = req.user_email or s.user_email
+    user_email = (req.user_email or s.user_email or "").strip() or None
+    if not user_email:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "user_email は必須です。エスカレーション時にメールアドレスを"
+                "指定してください (同じ人による複数回の起票でアカウントが"
+                "量産されないよう、email で名寄せします)。"
+            ),
+        )
 
     # 件名: 明示が無ければセッション最初のユーザー発話を使う
     title = req.title
@@ -239,6 +261,7 @@ def escalate_session(session_id: str, req: Optional[EscalateRequest] = None) -> 
             title=title,
             description=description,
             is_private=req.is_private,
+            chatbot_session_id=s.session_id,
         )
     except EscalationError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e

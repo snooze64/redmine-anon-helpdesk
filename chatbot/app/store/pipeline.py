@@ -12,7 +12,7 @@ from app.store.vectorstore import doc_id, get_store
 
 @dataclass
 class CrawlOutcome:
-    fetched: int
+    fetched: int            # 公開チケットの取得数 (= inserted + updated + skipped_unchanged)
     inserted: int           # 未登録 → 新規 index
     updated: int            # 登録済 → updated_on が更新されたので再 embed して上書き
     deleted: int            # 登録済 (公開時に取り込んでいた) → 今 private 化されたので削除
@@ -87,7 +87,9 @@ def crawl_and_index(project_identifier: str | None = None) -> CrawlOutcome:
         )
 
     return CrawlOutcome(
-        fetched=len(chunks),
+        # private チケットは「取得」に含めない (= 公開チケットのみカウント)。
+        # こうすると "取得 = 新規 + 更新 + スキップ(変更なし)" が常に一致する。
+        fetched=inserted + updated + skipped_unchanged,
         inserted=inserted,
         updated=updated,
         deleted=deleted,

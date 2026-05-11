@@ -22,15 +22,22 @@ class LLMConfig:
 
     provider:
       - "ollama": ローカル/コンテナ内 Ollama を使う (api_key 不要)
-      - "openai": OpenAI API を使う (api_key 必須)
+      - "openai": OpenAI API を使う (api_key 必須)。base_url を指定すれば
+                  OpenAI 互換 API (Azure OpenAI / 社内 LLM ゲートウェイ /
+                  LiteLLM / vLLM 等) も使える。
     model:
       未指定なら provider 既定モデルにフォールバック
     api_key:
       openai の場合のみ必須。未指定なら settings.openai_api_key にフォールバック
+    base_url:
+      openai 互換 API を使う場合に指定。未指定 (None or 空文字) なら
+      settings.openai_base_url_default にフォールバック → それも空なら
+      公式 OpenAI (https://api.openai.com/v1) を使う。
     """
     provider: Provider = "ollama"
     model: Optional[str] = None
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
@@ -51,6 +58,12 @@ class LLMConfig:
         if self.api_key:
             return self.api_key
         return settings.openai_api_key
+
+    def resolve_base_url(self) -> Optional[str]:
+        """OpenAI 互換 API の base URL。空文字や None なら None を返す
+        (公式 OpenAI = SDK 既定エンドポイント)。"""
+        url = (self.base_url or settings.openai_base_url_default or "").strip()
+        return url or None
 
 
 # ---- Provider 別実装 ------------------------------------------------------
@@ -94,7 +107,11 @@ def _chat_openai(messages: list[dict], cfg: LLMConfig, timeout: float) -> str:
     except ImportError as e:
         raise LLMError("openai SDK 未インストール。requirements.txt を確認してください。") from e
 
-    client = OpenAI(api_key=api_key, timeout=timeout)
+    base_url = cfg.resolve_base_url()
+    client_kwargs: dict = {"api_key": api_key, "timeout": timeout}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    client = OpenAI(**client_kwargs)
     model = cfg.resolve_model()
 
     # o1 / o3 系は temperature 非対応・max_completion_tokens のみ

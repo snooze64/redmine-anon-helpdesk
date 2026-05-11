@@ -37,6 +37,7 @@ class ChatSession:
     llm_provider: Optional[str] = None         # "ollama" | "openai"
     llm_model: Optional[str] = None
     llm_api_key: Optional[str] = None          # OpenAI 用 (Ollama では未使用)
+    llm_base_url: Optional[str] = None         # OpenAI 互換 API の base URL (Azure / 社内 GW 等)
 
     def add_turn(self, role: str, content: str, citations: list[dict] | None = None) -> ChatTurn:
         t = ChatTurn(role=role, content=content, citations=citations or [])

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 from dataclasses import dataclass
 
@@ -17,6 +18,19 @@ from app.config import settings
 
 class EscalationError(RuntimeError):
     pass
+
+
+def _login_from_email(email: str) -> str:
+    """email から安定的なログイン ID を作る。
+
+    同じ email を出した人は **常に同じ login** にマップされるので、Redmine 側で
+    新しい匿名アカウントが量産されるのを防げる (idempotent な作成エンドポイントは
+    login 単位で重複検知するため)。
+
+    形式: "chat_<sha256(email_lc)[:10]>" (合計 15 文字、Redmine の 60 文字制限内)
+    """
+    h = hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+    return f"chat_{h[:10]}"
 
 
 @dataclass
@@ -43,14 +57,19 @@ def _ensure_membership(login: str) -> dict:
         return r.json()
 
 
-def _create_ticket(title: str, description: str, watcher_login: str, is_private: bool) -> dict:
+def _create_ticket(
+    title: str, description: str, watcher_login: str, is_private: bool,
+    chatbot_session_id: str | None = None,
+) -> dict:
     url = f"{settings.bridge_api_url.rstrip('/')}/tickets"
-    payload = {
+    payload: dict = {
         "title": title[:255],
         "description": description,
         "watcher_login": watcher_login,
         "is_private": is_private,
     }
+    if chatbot_session_id:
+        payload["chatbot_session_id"] = chatbot_session_id
     with httpx.Client(timeout=60.0) as cli:
         r = cli.post(url, json=payload)
         r.raise_for_status()
@@ -63,19 +82,28 @@ def escalate(
     title: str,
     description: str,
     is_private: bool = False,
+    chatbot_session_id: str | None = None,
 ) -> EscalationResult:
     """ユーザー登録 → メンバー登録 → 起票、を順に実行する。
 
-    user_login / user_email が未指定なら匿名ハンドルを生成する。
+    user_email は **必須**。同じ email を出した人は常に同じ Redmine アカウントに
+    マップされる (sha256(email) から派生した login を使う) ため、同じ人が
+    複数回エスカレーションしてもアカウントは増えない。
+
+    user_login は任意。指定された場合はそれを使い、未指定なら email から派生する。
     """
-    generated_password: str | None = None
+    if not user_email or not user_email.strip():
+        raise EscalationError(
+            "user_email は必須です。同じ人による複数回のエスカレーションで "
+            "Redmine 匿名アカウントが量産されないようにするため、email で名寄せします。"
+        )
+    user_email = user_email.strip()
+
     if not user_login:
-        # 匿名ハンドル: chat_<6文字hex>
-        user_login = f"chat_{secrets.token_hex(3)}"
-    if not user_email:
-        # `chatbot.local` のような .local TLD はメール検証で reserved name として
-        # 弾かれるため、example.com を使う (RFC 2606 でテスト用に確保されている)
-        user_email = f"{user_login}@example.com"
+        # email から派生した安定 login (idempotent な name-dedupe を効かせる)
+        user_login = _login_from_email(user_email)
+
+    generated_password: str | None = None
 
     try:
         # ユーザーが API 側で新規作成される場合に備えて password を発行
@@ -85,7 +113,10 @@ def escalate(
             generated_password = None  # 既存ユーザーのパスワードは触らない
 
         _ensure_membership(user_login)
-        ticket_res = _create_ticket(title, description, user_login, is_private)
+        ticket_res = _create_ticket(
+            title, description, user_login, is_private,
+            chatbot_session_id=chatbot_session_id,
+        )
 
         return EscalationResult(
             issue_id=int(ticket_res["issue_id"]),

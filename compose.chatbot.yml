@@ -74,6 +74,9 @@ services:
       # OpenAI (UI からの API キーが優先。環境変数はフォールバック)
       OPENAI_API_KEY:           ${OPENAI_API_KEY:-}
       OPENAI_LLM_MODEL_DEFAULT: ${OPENAI_LLM_MODEL_DEFAULT:-gpt-4o-mini}
+      # OpenAI 互換 API (Azure / 社内 LLM ゲートウェイ / LiteLLM / vLLM 等) の既定 base URL。
+      # UI 上で空欄ならこの値が使われる。両方空なら公式 OpenAI (https://api.openai.com/v1)。
+      OPENAI_BASE_URL_DEFAULT:  ${OPENAI_BASE_URL_DEFAULT:-}
       # RAG パラメータ
       RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}

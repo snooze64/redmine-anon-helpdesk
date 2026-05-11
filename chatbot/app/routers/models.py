@@ -17,6 +17,7 @@ class ModelsResponse(BaseModel):
     ollama_suggestions: list[str]    # 既定設定にある提案候補
     openai_default: str
     openai_suggestions: list[str]    # OpenAI の典型モデル候補 (静的リスト)
+    openai_base_url_default: str     # 環境変数で渡された OpenAI 互換 API の既定 base URL (空可)
 
 
 def _ollama_installed() -> list[str]:
@@ -48,4 +49,5 @@ def list_models() -> ModelsResponse:
         ollama_suggestions=_csv(settings.ollama_llm_suggestions),
         openai_default=settings.openai_llm_model_default,
         openai_suggestions=_csv(settings.openai_llm_suggestions),
+        openai_base_url_default=settings.openai_base_url_default,
     )

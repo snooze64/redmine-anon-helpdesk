@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""  # 環境変数のフォールバック。セッション側で上書き可
     openai_llm_model_default: str = "gpt-4o-mini"
     openai_llm_suggestions: str = "gpt-4o-mini,gpt-4o,gpt-4.1-mini,gpt-4.1,gpt-3.5-turbo,o1-mini,o1"
+    # OpenAI 互換 API (Azure OpenAI / 社内 LLM ゲートウェイ / LiteLLM / vLLM 等) を使う場合の base URL。
+    # 例: "https://my-internal-gw.example.com/v1"
+    # 空なら公式 OpenAI (https://api.openai.com/v1) を使う。
+    # セッション側 (UI 入力) で上書き可能。
+    openai_base_url_default: str = ""
 
     # ----- RAG パラメータ -----
     retrieval_top_k: int = 5

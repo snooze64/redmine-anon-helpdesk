@@ -42,6 +42,14 @@ services:
       INQUIRY_TRACKER_NAME:          ${INQUIRY_TRACKER_NAME:-}
       # 起票時にウォッチャーへ自動追加する「回答者」ロール名 (完全一致)
       RESPONDER_ROLE_NAME:           ${RESPONDER_ROLE_NAME:-回答者}
+      # 起票を Redmine 上「質問者本人」として行うか (impersonation)。
+      # True にすると author=質問者 になり private チケットを本人が閲覧可能。
+      # 質問者ロールに add_issues 権限が必須 (docs/manual_setup.md §1-1 参照)。
+      CREATE_TICKET_AS_QUESTIONER:   ${CREATE_TICKET_AS_QUESTIONER:-true}
+      # チャットボット起票識別用カスタムフィールド ID。
+      # 0 (既定) なら無効。docs/manual_setup.md §9-2 で作成したフィールドの
+      # ID を入れると、起票時に session ID が自動記録される (監査用)。
+      CHATBOT_SESSION_CUSTOM_FIELD_ID: ${CHATBOT_SESSION_CUSTOM_FIELD_ID:-0}
       # プロキシ (実行時)
       HTTP_PROXY:  ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
