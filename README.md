@@ -133,6 +133,20 @@ docker exec redmine-ollama ollama pull nomic-embed-text
 >
 > 詳細・チューニング項目・トラブルシューティングは **[chatbot/README.md](chatbot/README.md)** を参照。
 
+#### Mode C 固有の Redmine 側追加セットアップ
+
+Mode C を実際に使うには、Mode A / B のセットアップに加えて以下が必要です:
+
+1. **質問者ロールに「チケットの追加」権限を付与** ([docs/manual_setup.md §1-1](docs/manual_setup.md))
+   - チャットボットが質問者本人として impersonate 起票するために必要
+   - これだけだと UI からも直接起票できてしまうので 2 で抑止する
+2. **View Customize プラグインで「+ 新しいチケット」 UI を抑止** ([docs/view_customize_setup.md](docs/view_customize_setup.md))
+   - グローバルページは全員、プロジェクト内は質問者ロールのみ、起票 UI を非表示にする
+3. **(任意) Chatbot Session カスタムフィールドで監査** ([docs/manual_setup.md §9-2](docs/manual_setup.md))
+   - チャットボット経由・UI 直叩きの起票を後追いで区別したいとき
+
+チャットボット利用者向けの操作マニュアルは **[docs/chatbot_usage.md](docs/chatbot_usage.md)**。
+
 ### 共通の初期セットアップ（Mode A / B 共通）
 
 ここまでで Redmine 本体が動いていますが、ロール・トラッカー等の **既定データ投入が必要**です:
@@ -175,8 +189,10 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 
 | 文書 | 内容 |
 |---|---|
-| [docs/manual_setup.md](docs/manual_setup.md) | Web UI のみで完結する全セットアップ手順（ロール、ユーザー、プロジェクト、SMTP、サンプルチケット、動作確認） |
+| [docs/manual_setup.md](docs/manual_setup.md) | Web UI のみで完結する全セットアップ手順（ロール、ユーザー、プロジェクト、SMTP、サンプルチケット、動作確認、§9 で Mode C 固有の追加設定） |
 | [docs/plugin_install.md](docs/plugin_install.md) | redmine_hidden_user_profile プラグイン単体のインストール手順（既存の Redmine への後付け、オフライン環境向けパターンも含む） |
+| [docs/view_customize_setup.md](docs/view_customize_setup.md) | (Mode C 用) View Customize プラグインで「+ 新しいチケット」を抑止する手順 — グローバルは全員、プロジェクト内は質問者のみ非表示 |
+| [docs/chatbot_usage.md](docs/chatbot_usage.md) | (Mode C 用) チャットボット利用者向けマニュアル — LLM 切替、エスカレーション、private チケットの見え方 |
 | [api/README.md](api/README.md) | Mode B のチャットボット連携用 FastAPI ブリッジの仕様 — エンドポイント・接続情報・想定ユースケース |
 | [chatbot/README.md](chatbot/README.md) | Mode C の RAG チャットボットの仕様 — クローラ / ベクトル DB / Ollama / HITL UX |
 
