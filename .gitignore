@@ -19,3 +19,6 @@ scripts/
 
 # 一時的な /tmp 系の出力
 *.log
+
+# Claude Code のローカル設定 (個人の権限ルール・環境差分は共有しない)
+.claude/settings.local.json
