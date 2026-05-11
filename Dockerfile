@@ -29,6 +29,15 @@ RUN git clone --depth 1 https://github.com/JGallot/redmine_hidden_user_profile.g
         /usr/src/redmine/plugins/redmine_hidden_user_profile \
     && chown -R redmine:redmine /usr/src/redmine/plugins/redmine_hidden_user_profile
 
+# View Customize plugin — 任意の URL パターンに対して JavaScript / CSS を
+# 注入できるプラグイン。本プロジェクトでは「質問者ロールには『+ 新しい
+# チケット』を表示しない」目的で使う (UI 経由の直接起票を抑止し、
+# チャットボット経由に誘導するため)。
+# セットアップ手順は docs/view_customize_setup.md 参照。
+RUN git clone --depth 1 https://github.com/onozaty/redmine-view-customize.git \
+        /usr/src/redmine/plugins/view_customize \
+    && chown -R redmine:redmine /usr/src/redmine/plugins/view_customize
+
 USER redmine
 
 # 初期セットアップは docs/manual_setup.md（管理画面手順）を参照。

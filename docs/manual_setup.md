@@ -86,12 +86,39 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
    | 作業時間の可視性 | すべての作業時間 |
    | ユーザーの可視性 | すべてのアクティブなユーザー |
 
-4. 下部「権限」セクションは **以下の 3 つだけ** チェックして他は外す:
+4. 下部「権限」セクションは **以下の 4 つだけ** チェックして他は外す:
    - **チケットトラッキング** > **チケットの閲覧**
+   - **チケットトラッキング** > **チケットの追加**
    - **チケットトラッキング** > **コメントの追加**
    - **チケットトラッキング** > **ウォッチャー一覧の閲覧**
 
-5. ページ下部 **作成** をクリック
+   > **「チケットの追加」を含める理由**: チャットボット (Mode C) がエスカレーション
+   > 時に、Redmine API の `X-Redmine-Switch-User` 機能で「質問者本人」になりすま
+   > して起票します。これにより質問者が **自分の private チケットだけは** 閲覧可能
+   > になります (`author == self` のため)。質問者ロールに `add_issues` 権限が無い
+   > と、なりすまし起票が 403 で失敗します。
+   >
+   > UI 経由の直接起票を抑止したい場合は、`view_customize` プラグインで「+ 新しい
+   > チケット」ボタンを非表示にします。手順は [docs/view_customize_setup.md](view_customize_setup.md) 参照。
+
+5. **【重要・忘れがち】「チケットの追加」のすぐ下に出る「トラッカー」マトリックス**
+   で、Bug / Feature / Support **すべての列** にチェックを入れる
+   (または **「全て」** 列にチェック)。
+   - これを忘れると `permissions_all_trackers["add_issues"]` が `"0"` のまま、
+     かつ `permissions_tracker_ids["add_issues"]` も空になり、Redmine が
+     `Issue.allowed_target_trackers` を空と判定する
+   - 結果として「権限はある」のに「+ 新しいチケット」ボタンが UI で出ず、
+     **チャットボットからの impersonate 起票も同じ理由で 403** になる
+   - 同様のことを `delete_issues` / `edit_issues` を有効にした他のロールでも
+     チェックすること
+   - 確認用 Rails 1-liner:
+     ```bash
+     docker compose exec -T redmine bundle exec rails runner \
+       'puts Role.find_by(name: "質問者").permissions_all_trackers["add_issues"]'
+     # → "1" が出れば OK、"0" なら未許可
+     ```
+
+6. ページ下部 **作成** をクリック
 
 ### 1-2. 回答者ロール
 
@@ -481,6 +508,76 @@ SMTP_OPENSSL_CA_FILE=/usr/src/redmine/files/private-ca.crt
 | メールが届かない | `管理 → 設定 → メール通知 → テストメール送信` の結果を確認 / `config/configuration.yml` の SMTP 設定 / Spam フォルダ |
 | `responder` でも 403 が出る | `回答者` ロールに「Show user profile」権限が付いていない |
 | `questioner` でも 200 が返る | 他ロール（特に Manager）に「Show user profile」が残っている |
+
+---
+
+## 9. (Mode C 用) チャットボット連携の追加設定
+
+Mode C (RAG チャットボット) を使う場合、上記までのセットアップに加えて以下を行います。
+Mode A / B 運用には不要。
+
+### 9-1. 「+ 新しいチケット」を質問者ロールから非表示にする (推奨)
+
+質問者ロールに `add_issues` 権限を付けた以上、UI から直接「+ 新しいチケット」を
+クリックして起票することは原理的に可能。これを抑止して
+**「質問者の起票経路はチャットボットのみ」** に近づけるため、View Customize
+プラグインで該当 UI を非表示にします。
+
+手順は **[docs/view_customize_setup.md](view_customize_setup.md)** 参照
+(プラグインは Dockerfile で導入済み)。
+
+### 9-2. (任意) チャットボット起票識別用カスタムフィールド
+
+UI 経由で直接起票されたチケットを後から識別するため、`Chatbot Session` という
+カスタムフィールドを作成し、チャットボット経由の起票時に session ID を自動記録
+させると **「チャットボットを通さずに作られたチケット」** が一目で分かるように
+なります (監査用)。
+
+1. **管理 → カスタムフィールド** → 右上 **新しいカスタムフィールド**
+2. **オブジェクト**: チケット → **次へ**
+3. 以下を入力:
+
+   | 項目 | 値 |
+   |---|---|
+   | 書式 | テキスト |
+   | 名称 | `Chatbot Session` |
+   | 説明 | チャットボット経由で起票された場合、ここに session ID が記録されます。空ならチャットボット非経由の起票。 |
+   | 最小〜最大長 | (空欄) |
+   | 正規表現 | (空欄) |
+   | デフォルト値 | (空欄) |
+   | テキストの書式 | なし |
+   | リンク URL | (空欄) |
+   | 全プロジェクト用 | ON (推奨) |
+   | 必須 | OFF |
+   | フィルタとして使用 | ON |
+   | 検索対象 | ON (任意) |
+   | 表示 | 全ユーザー |
+
+4. **トラッカー**: 起票で使うトラッカー (Support 等) にチェック
+5. **作成**
+6. 一覧画面に戻り、作成された行の **ID** をメモする (例: `1`)
+
+#### 9-2-1. chatbot 連携設定への反映
+
+`.env` の `CHATBOT_SESSION_CUSTOM_FIELD_ID` に上記の **ID** を設定し、
+api コンテナを再起動:
+
+```
+CHATBOT_SESSION_CUSTOM_FIELD_ID=1
+```
+
+```bash
+docker compose -f docker-compose.yml -f compose.api.yml -f compose.chatbot.yml \
+    up -d api
+```
+
+これ以降、チャットボットからエスカレーションされたチケットには `Chatbot Session`
+フィールドに session ID が自動記録されます。UI で起票されたチケットでは空に
+なるので、**「`Chatbot Session` 空 + 作成者: 質問者」** のフィルタで
+バイパス起票が検出可能です。
+
+> このフィールドは **完全に任意**。ID を `0` のままにしておけば、チャットボット
+> は単にこの記録をスキップします (= フィールド未作成でも動作する)。
 
 ---
 
