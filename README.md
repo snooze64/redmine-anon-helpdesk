@@ -79,16 +79,30 @@ cd redmine-anon-helpdesk
 
 # 2. 環境変数のテンプレートをコピー (中身は何も変更しなくても起動できる)
 cp .env.example .env
+
+# 3. Redmine プラグインを host 側に取得 (推奨セットを clone)
+#    Windows: .\tools\install_plugins.ps1
+#    Linux/macOS: ./tools/install_plugins.sh
 ```
+
+> 本リポジトリは **プラグインを Docker イメージに焼き込まず、ホストの
+> `./plugins/` を bind-mount で読み込む** 方式です。プラグインの追加・更新は
+> ホスト側で `git clone` / `git pull` するだけで、再ビルドは不要。詳細は
+> [docs/plugin_install.md](docs/plugin_install.md) 参照。
 
 ### Mode A: Redmine だけ起動
 
 ```bash
-# 3a. ビルド & 起動 (docker-compose.yml だけを使用)
+# 4a. ビルド & 起動 (docker-compose.yml だけを使用)
 docker compose build
 docker compose up -d
 
-# 4a. ブラウザで開く
+# 5a. プラグインを Redmine に反映 (plugins:migrate + tmp:clear + restart)
+#     初回または ./plugins/ 配下を変更したときに実行
+#     Windows: .\tools\refresh_plugins.ps1
+#     Linux/macOS: ./tools/refresh_plugins.sh
+
+# 6a. ブラウザで開く
 #     http://localhost:3080
 #     初回ログイン: admin / admin → 強制パスワード変更
 ```
@@ -96,11 +110,13 @@ docker compose up -d
 ### Mode B: Redmine + API を一緒に起動
 
 ```bash
-# 3b. ビルド & 起動 (docker-compose.yml に compose.api.yml を重ねる)
+# 4b. ビルド & 起動 (docker-compose.yml に compose.api.yml を重ねる)
 docker compose -f docker-compose.yml -f compose.api.yml build
 docker compose -f docker-compose.yml -f compose.api.yml up -d
 
-# 4b. Redmine とブリッジ API の両方が起動
+# 5b. プラグインを Redmine に反映 (Mode A と同じく refresh_plugins を実行)
+
+# 6b. Redmine とブリッジ API の両方が起動
 #     - http://localhost:3080      Redmine
 #     - http://localhost:8000      FastAPI
 #     - http://localhost:8000/docs Swagger UI (API 仕様)
@@ -113,15 +129,17 @@ docker compose -f docker-compose.yml -f compose.api.yml up -d
 ### Mode C: Redmine + API + Chatbot をフルスタック起動
 
 ```bash
-# 3c. ビルド & 起動 (3 つの compose ファイルを重ねる)
+# 4c. ビルド & 起動 (3 つの compose ファイルを重ねる)
 docker compose -f docker-compose.yml -f compose.api.yml -f compose.chatbot.yml build
 docker compose -f docker-compose.yml -f compose.api.yml -f compose.chatbot.yml up -d
 
-# 4c. 初回のみ: Ollama に LLM と embedding モデルを pull (数 GB)
+# 5c. プラグインを Redmine に反映 (Mode A と同じく refresh_plugins を実行)
+
+# 6c. 初回のみ: Ollama に LLM と embedding モデルを pull (数 GB)
 docker exec redmine-ollama ollama pull qwen2.5:7b
 docker exec redmine-ollama ollama pull nomic-embed-text
 
-# 5c. ブラウザで開く
+# 7c. ブラウザで開く
 #     - http://localhost:3080  Redmine
 #     - http://localhost:8000  ブリッジ API (Swagger UI: /docs)
 #     - http://localhost:8100  Chatbot バックエンド (Swagger UI: /docs)
@@ -190,7 +208,7 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 | 文書 | 内容 |
 |---|---|
 | [docs/manual_setup.md](docs/manual_setup.md) | Web UI のみで完結する全セットアップ手順（ロール、ユーザー、プロジェクト、SMTP、サンプルチケット、動作確認、§9 で Mode C 固有の追加設定） |
-| [docs/plugin_install.md](docs/plugin_install.md) | redmine_hidden_user_profile プラグイン単体のインストール手順（既存の Redmine への後付け、オフライン環境向けパターンも含む） |
+| [docs/plugin_install.md](docs/plugin_install.md) | プラグイン管理ガイド (host bind-mount 方式) — 追加・更新・削除のフロー、`tools/install_plugins`・`refresh_plugins`・`reset_plugin_state` の使い方、トラブルシューティング |
 | [docs/view_customize_setup.md](docs/view_customize_setup.md) | (Mode C 用) View Customize プラグインで「+ 新しいチケット」を抑止する手順 — グローバルは全員、プロジェクト内は質問者のみ非表示 |
 | [docs/chatbot_usage.md](docs/chatbot_usage.md) | (Mode C 用) チャットボット利用者向けマニュアル — LLM 切替、エスカレーション、private チケットの見え方 |
 | [api/README.md](api/README.md) | Mode B のチャットボット連携用 FastAPI ブリッジの仕様 — エンドポイント・接続情報・想定ユースケース |
@@ -205,11 +223,16 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 
 ## 依存プラグイン
 
+`./tools/install_plugins.{ps1,sh}` で host の `./plugins/` に取得します
+(Dockerfile に焼き込まず host bind-mount で読み込む方式)。詳細は
+[docs/plugin_install.md](docs/plugin_install.md)。
+
 | プラグイン | 用途 | リポジトリ |
 |---|---|---|
-| `redmine_hidden_user_profile` | プロフィール画面・ユーザーリンクの権限ベース非表示化 | https://github.com/JGallot/redmine_hidden_user_profile |
+| `redmine_hidden_user_profile` | プロフィール画面・ユーザーリンクの権限ベース非表示化 (匿名性) | https://github.com/JGallot/redmine_hidden_user_profile |
+| `view_customize` (Mode C 用) | 任意 URL に JS/CSS 注入 — 質問者ロールから「+ 新しいチケット」を非表示にして起票経路をチャットボットに統一する | https://github.com/onozaty/redmine-view-customize |
 
-> 上記プラグインは LICENSE ファイルが提供されていません。本リポジトリは Dockerfile 内で `git clone` するのみで再配布はしていませんが、フォーク・ベンダリングして利用する場合は元プラグインのライセンス状況をご確認ください。
+> `redmine_hidden_user_profile` は LICENSE ファイルが提供されていません。本リポジトリはイメージに焼き込まず host bind-mount で読み込むだけで再配布はしていませんが、フォーク・ベンダリングして利用する場合は元プラグインのライセンス状況をご確認ください。
 
 ## ライセンス
 

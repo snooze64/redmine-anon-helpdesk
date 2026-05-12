@@ -20,5 +20,11 @@ scripts/
 # 一時的な /tmp 系の出力
 *.log
 
+# Redmine プラグインは host で git clone する運用 (Dockerfile に焼き込まない)。
+# ./tools/install_plugins.{ps1,sh} で推奨プラグインを取得する。
+# ディレクトリ自体は残したいので .gitkeep だけ追跡する。
+plugins/*
+!plugins/.gitkeep
+
 # Claude Code のローカル設定 (個人の権限ルール・環境差分は共有しない)
 .claude/settings.local.json
