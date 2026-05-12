@@ -118,6 +118,11 @@ services:
     volumes:
       - redmine6_files:/usr/src/redmine/files
       - ./config/configuration.yml:/usr/src/redmine/config/configuration.yml:ro
+      # プラグインはホストの ./plugins/ を bind-mount で読み込む。
+      # 推奨プラグインを取得: ./tools/install_plugins.{ps1,sh}
+      # 反映 (plugins:migrate + tmp:clear + restart): ./tools/refresh_plugins.{ps1,sh}
+      # 詳細: docs/plugin_install.md
+      - ./plugins:/usr/src/redmine/plugins
 
 volumes:
   db6_data:
