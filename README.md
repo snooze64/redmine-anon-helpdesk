@@ -211,6 +211,7 @@ docker compose exec -T -e REDMINE_LANG=ja redmine bundle exec rake redmine:load_
 | [docs/plugin_install.md](docs/plugin_install.md) | プラグイン管理ガイド (host bind-mount 方式) — 追加・更新・削除のフロー、`tools/install_plugins`・`refresh_plugins`・`reset_plugin_state` の使い方、トラブルシューティング |
 | [docs/view_customize_setup.md](docs/view_customize_setup.md) | (Mode C 用) View Customize プラグインで「+ 新しいチケット」を抑止する手順 — グローバルは全員、プロジェクト内は質問者のみ非表示 |
 | [docs/chatbot_usage.md](docs/chatbot_usage.md) | (Mode C 用) チャットボット利用者向けマニュアル — LLM 切替、エスカレーション、private チケットの見え方 |
+| [docs/ldap_chatbot_account_provisioning.md](docs/ldap_chatbot_account_provisioning.md) | (検討メモ) チャットボット初回利用時に LDAP で本人確認し、Redmine ユーザーを LDAP 認証方式で自動作成する案 |
 | [api/README.md](api/README.md) | Mode B のチャットボット連携用 FastAPI ブリッジの仕様 — エンドポイント・接続情報・想定ユースケース |
 | [chatbot/README.md](chatbot/README.md) | Mode C の RAG チャットボットの仕様 — クローラ / ベクトル DB / Ollama / HITL UX |
 
