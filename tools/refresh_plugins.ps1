@@ -15,15 +15,18 @@ $ErrorActionPreference = 'Continue'
 $failed = 0
 
 Write-Host "[1/3] plugins:migrate..."
-docker compose exec -T redmine bundle exec rake redmine:plugins:migrate RAILS_ENV=productionif ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → plugins:migrate failed" -ForegroundColor Red }
+docker compose exec -T redmine bundle exec rake redmine:plugins:migrate RAILS_ENV=production
+if ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → plugins:migrate failed" -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "[2/3] tmp:clear..."
-docker compose exec -T redmine bundle exec rake tmp:clear RAILS_ENV=productionif ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → tmp:clear failed" -ForegroundColor Red }
+docker compose exec -T redmine bundle exec rake tmp:clear RAILS_ENV=production
+if ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → tmp:clear failed" -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "[3/3] restart redmine..."
-docker compose restart redmineif ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → restart failed" -ForegroundColor Red }
+docker compose restart redmine
+if ($LASTEXITCODE -ne 0) { $failed++; Write-Host "  → restart failed" -ForegroundColor Red }
 
 Start-Sleep -Seconds 3
 

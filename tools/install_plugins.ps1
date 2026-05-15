@@ -20,7 +20,8 @@ $ErrorActionPreference = 'Continue'
 # (name, repo url) の組。pin したい場合は git -C plugins/<name> checkout <tag> を別途。
 $plugins = @(
   @{ name = 'redmine_hidden_user_profile'; url = 'https://github.com/JGallot/redmine_hidden_user_profile.git' },
-  @{ name = 'view_customize';              url = 'https://github.com/onozaty/redmine-view-customize.git'      }
+  @{ name = 'view_customize';              url = 'https://github.com/onozaty/redmine-view-customize.git'      },
+  @{ name = 'redmine_ai_helper';           url = 'https://github.com/haru/redmine_ai_helper.git'             }
 )
 
 $root       = Split-Path $PSScriptRoot -Parent
@@ -31,10 +32,13 @@ $failed = @()
 foreach ($p in $plugins) {
     $dst = Join-Path $pluginsDir $p.name
     if (Test-Path (Join-Path $dst '.git')) {
+        $safeDst = (Resolve-Path -LiteralPath $dst).ProviderPath -replace '\\', '/'
         Write-Host "[$($p.name)] git pull..."
-        git -C $dst pull --ff-only    } else {
+        git -c "safe.directory=$safeDst" -C $dst pull --ff-only
+    } else {
         Write-Host "[$($p.name)] git clone..."
-        git clone --depth 1 $p.url $dst    }
+        git clone --depth 1 $p.url $dst
+    }
     if ($LASTEXITCODE -ne 0) { $failed += $p.name }
 }
 

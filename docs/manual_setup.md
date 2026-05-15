@@ -14,6 +14,7 @@ Redmine の Web UI だけで「質問者・回答者ロール定義」「View Pr
 - 言語が日本語に設定されている（個人設定 → 言語: Japanese）
 - プラグイン `redmine_hidden_user_profile` がインストール済み（`管理 → プラグイン` に表示される）。これがないと **「Show user profile」**（=プロフィールの閲覧）権限が出てきません
   - 注: このプラグインには日本語ロケールが含まれていないため、UI 上は **英語のまま「Show user profile」** と表示されます
+- AI Helper を使う場合は、プラグイン `redmine_ai_helper` がインストール済み（`管理 → プラグイン` に表示される）。モデル設定・ロール権限・プロジェクトモジュールの有効化は [redmine_ai_helper_setup.md](redmine_ai_helper_setup.md) 参照。
 
 ### 0-1. 既定構成データのロード（初回のみ）
 

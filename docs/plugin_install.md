@@ -15,12 +15,13 @@
 
 ```
 redmine/
-├── Dockerfile                 ← プラグインは含まれていない (素の redmine:6)
+├── Dockerfile                 ← プラグインは含まないが、AI Helper 依存 gem 用の build-essential を追加
 ├── docker-compose.yml         ← ./plugins:/usr/src/redmine/plugins を bind-mount
 ├── plugins/                   ← ホスト側でプラグインを置く場所 (gitignore)
 │   ├── .gitkeep
 │   ├── redmine_hidden_user_profile/   ← git clone で配置
-│   └── view_customize/                ← 同上
+│   ├── view_customize/                ← 同上
+│   └── redmine_ai_helper/             ← 同上
 ├── tools/
 │   ├── install_plugins.{ps1,sh}    ← 推奨プラグインを clone / 更新
 │   ├── refresh_plugins.{ps1,sh}    ← 追加・更新後に必ず実行
@@ -50,7 +51,7 @@ notepad .env
 
 # 3. 推奨プラグインを取得
 .\tools\install_plugins.ps1
-# → plugins/redmine_hidden_user_profile, plugins/view_customize が作られる
+# → plugins/redmine_hidden_user_profile, plugins/view_customize, plugins/redmine_ai_helper が作られる
 
 # 4. Redmine を起動
 docker compose up -d
@@ -60,7 +61,7 @@ docker compose up -d
 # → plugins:migrate + tmp:clear + restart
 ```
 
-これで `管理 → プラグイン` に 2 つのプラグインが表示されれば成功。
+これで `管理 → プラグイン` に 3 つのプラグインが表示されれば成功。
 
 ---
 
@@ -74,6 +75,7 @@ docker compose up -d
 $plugins = @(
   @{ name='redmine_hidden_user_profile'; url='https://github.com/JGallot/redmine_hidden_user_profile.git' },
   @{ name='view_customize';              url='https://github.com/onozaty/redmine-view-customize.git'      },
+  @{ name='redmine_ai_helper';           url='https://github.com/haru/redmine_ai_helper.git'             },
   @{ name='my_new_plugin';               url='https://github.com/example/my_new_plugin.git'              }   # ← 追加
 )
 ```
@@ -219,6 +221,8 @@ $plugins = @(
 |---|---|---|
 | `管理 → プラグイン` にプラグインが出てこない | bind-mount が効いていない / プラグインディレクトリが空 | `docker compose exec -T redmine ls /usr/src/redmine/plugins/` で確認 |
 | Redmine が boot ループする (`docker compose logs redmine` がエラー繰り返し) | プラグイン migration が未適用 or プラグインを削除後の DB 残骸 | `./tools/refresh_plugins.ps1` → だめなら `./tools/reset_plugin_state.ps1 <name>` |
+| `redmine_ai_helper` 追加後に `You have to install development tools first` | AI Helper の依存 gem が native extension をビルドするため、コンパイラが必要 | `Dockerfile` に `build-essential` を入れて `docker compose build redmine` → `docker compose up -d redmine` |
+| AI Helper の `OpenAI-Organization header should match organization for API key` | モデルプロファイルの `Organization ID` が API key の所属組織と一致していない | `Organization ID` を空欄にするか、OpenAI Platform の `org-...` ID を入れる |
 | `tmp:clear` が `Permission denied` | bind-mount の権限問題 (ホストの umask 等) | `chmod -R o+r plugins/` で読み権限を与える (Linux ホストの場合) |
 | プラグインが UI には出るが機能しない | `plugins:migrate` 未実行 / Rails サーバー未再起動 | `./tools/refresh_plugins.ps1` を再実行 |
 | プラグインを更新したのに古い挙動のまま | bootsnap キャッシュが残存 | `./tools/refresh_plugins.ps1` 内の `tmp:clear` で消える |
@@ -273,6 +277,43 @@ docker compose up -d
 | ライセンス | MIT |
 
 設置後の JS ルール登録手順は [docs/view_customize_setup.md](view_customize_setup.md) 参照。
+
+### 8-3. `redmine_ai_helper` ([haru/redmine_ai_helper](https://github.com/haru/redmine_ai_helper))
+
+Redmine 画面に AI chat / issue summary / reply draft / sub issue draft / project health report などを追加するプラグイン。
+本リポジトリでは非商用系の AI 支援プラグインとして host bind-mount 方式で導入する。
+
+| 項目 | 値 |
+|---|---|
+| Redmine 互換 | 6.0+ |
+| 導入済みバージョン | 3.1.1 |
+| DB マイグレーション | **有り** (`ai_helper_*` テーブルを作る) |
+| Gemfile 追加 | **有り** (`ruby_llm`, `ruby_llm-mcp`, `mcp`, `langfuse`, `qdrant-ruby` など) |
+| Dockerfile 追加 | `build-essential` (native extension gem のビルド用) |
+| ライセンス | MIT |
+
+初期設定では `管理 → AI Helper` から model profile を作成する。
+OpenAI を使う場合は、まず以下の設定が無難。
+
+| 項目 | 推奨値 |
+|---|---|
+| Type | `OpenAI` |
+| Name | 任意 (`OpenAI GPT-4.1 mini` など) |
+| Access key | OpenAI API key |
+| Organization ID | 空欄 (複数組織を明示したい場合のみ `org-...`) |
+| Model name | `gpt-4.1-mini` |
+| Temperature | `0.3`〜`0.7` |
+
+ロール権限は `管理 → ロールと権限` で設定する。
+
+| ロール | 推奨権限 |
+|---|---|
+| Manager / 管理寄りロール | `View AI Helper`, `Settings AI Helper`, `Delete AI Helper health reports` |
+| Developer / Reporter | `View AI Helper` |
+| Anonymous / Non member | 原則付与しない |
+
+各プロジェクトで利用するには、`プロジェクト → 設定 → モジュール` で **AI Helper** を有効化する。
+詳細は [redmine_ai_helper_setup.md](redmine_ai_helper_setup.md) 参照。
 
 ---
 

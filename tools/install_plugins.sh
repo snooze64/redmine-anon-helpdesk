@@ -9,6 +9,7 @@ set -euo pipefail
 PLUGINS=(
   "redmine_hidden_user_profile https://github.com/JGallot/redmine_hidden_user_profile.git"
   "view_customize              https://github.com/onozaty/redmine-view-customize.git"
+  "redmine_ai_helper           https://github.com/haru/redmine_ai_helper.git"
 )
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,8 +20,9 @@ for entry in "${PLUGINS[@]}"; do
   url=$(echo "$entry" | awk '{print $2}')
   dst="$root/plugins/$name"
   if [ -d "$dst/.git" ]; then
+    safe_dst="$(cd "$dst" && pwd)"
     echo "[$name] git pull..."
-    git -C "$dst" pull --ff-only
+    git -c safe.directory="$safe_dst" -C "$dst" pull --ff-only
   else
     echo "[$name] git clone..."
     git clone --depth 1 "$url" "$dst"

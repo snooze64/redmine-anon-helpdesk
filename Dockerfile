@@ -9,6 +9,12 @@
 
 FROM redmine:6
 
+USER root
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
 # USER について:
 #   - redmine:6 のベースイメージはデフォルトで root 起動なので USER root は不要
 #   - 末尾の USER redmine は必須:
